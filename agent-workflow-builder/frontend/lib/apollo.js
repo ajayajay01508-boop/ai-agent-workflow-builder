@@ -1,52 +1,91 @@
-import { ApolloClient, InMemoryCache, HttpLink, split } from '@apollo/client';
+import {
+  ApolloClient,
+  InMemoryCache,
+  HttpLink,
+  split,
+} from '@apollo/client';
+
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
 import { createClient } from 'graphql-ws';
 import { getMainDefinition } from '@apollo/client/utilities';
 import { setContext } from '@apollo/client/link/context';
+
 import { nhost } from './nhost';
 
 function makeApolloClient() {
-  const graphqlUrl = process.env.NEXT_PUBLIC_HASURA_GRAPHQL_URL; // https://<sub>.nhost.run/v1/graphql
-  const wsUrl = graphqlUrl.replace(/^http/, 'ws');
+  const GRAPHQL_URL =
+    process.env.NEXT_PUBLIC_HASURA_GRAPHQL_URL;
 
-  const httpLink = new HttpLink({ uri: graphqlUrl });
+  if (!GRAPHQL_URL) {
+    throw new Error(
+      'NEXT_PUBLIC_HASURA_GRAPHQL_URL is not defined'
+    );
+  }
 
-  const authLink = setContext(async (_, { headers }) => {
+  const httpLink = new HttpLink({
+    uri: GRAPHQL_URL,
+  });
+
+  const authLink = setContext((_, { headers }) => {
     const token = nhost.auth.getAccessToken();
+
     return {
       headers: {
         ...headers,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {}),
       },
     };
   });
 
-  const wsLink =
-    typeof window !== 'undefined'
-      ? new GraphQLWsLink(
-          createClient({
-            url: wsUrl,
-            connectionParams: () => {
-              const token = nhost.auth.getAccessToken();
-              return { headers: token ? { Authorization: `Bearer ${token}` } : {} };
-            },
-          })
-        )
-      : null;
+  const authenticatedHttpLink = authLink.concat(httpLink);
 
-  const splitLink =
-    typeof window !== 'undefined'
-      ? split(
-          ({ query }) => {
-            const def = getMainDefinition(query);
-            return def.kind === 'OperationDefinition' && def.operation === 'subscription';
-          },
-          wsLink,
-          authLink.concat(httpLink)
-        )
-      : authLink.concat(httpLink);
+  if (typeof window === 'undefined') {
+    return new ApolloClient({
+      link: authenticatedHttpLink,
+      cache: new InMemoryCache(),
+    });
+  }
 
-  return new ApolloClient({ link: splitLink, cache: new InMemoryCache() });
+  const wsUrl = GRAPHQL_URL.replace(/^http/, 'ws');
+
+  const wsLink = new GraphQLWsLink(
+    createClient({
+      url: wsUrl,
+      connectionParams: () => {
+        const token = nhost.auth.getAccessToken();
+
+        return token
+          ? {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          : {};
+      },
+    })
+  );
+
+  const link = split(
+    ({ query }) => {
+      const definition = getMainDefinition(query);
+
+      return (
+        definition.kind === 'OperationDefinition' &&
+        definition.operation === 'subscription'
+      );
+    },
+    wsLink,
+    authenticatedHttpLink
+  );
+
+  return new ApolloClient({
+    link,
+    cache: new InMemoryCache(),
+  });
 }
 
 export default makeApolloClient;

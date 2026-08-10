@@ -10,7 +10,7 @@ import {
   TRIGGER_WORKFLOW_RUN,
   APPROVE_STEP,
   STEP_RUNS_SUBSCRIPTION,
-} from '../../../../graphql/operations';
+} from '../../../graphql/operations';
 
 const STEP_TYPES = ['llm_call', 'http_request', 'db_write', 'notify', 'conditional_branch', 'approval_gate'];
 const OWNER_ONLY_TYPES = ['db_write', 'notify']; // mirrors the Hasura check permission
