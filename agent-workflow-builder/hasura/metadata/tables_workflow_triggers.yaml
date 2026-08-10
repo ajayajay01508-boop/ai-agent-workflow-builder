@@ -1,0 +1,86 @@
+table:
+  schema: public
+  name: workflow_triggers
+
+select_permissions:
+  - role: user
+    permission:
+      # webhook_secret is intentionally excluded from the exposed column set —
+      # it must never be readable over GraphQL, only used server-side by the
+      # Action handler (via admin secret) when validating an inbound call.
+      columns: [id, workflow_id, type, config, is_enabled, created_at]
+      filter:
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+
+insert_permissions:
+  - role: user
+    permission:
+      # webhook triggers are an inbound door into the org from the outside
+      # world, so only an owner may create one; editor/owner may create the
+      # other trigger types
+      check:
+        _or:
+          - _and:
+              - type: { _neq: webhook }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _in: [owner, editor] }
+          - _and:
+              - type: { _eq: webhook }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _eq: owner }
+      columns: [workflow_id, type, config, is_enabled]
+      # webhook_secret is generated server-side (default random uuid via db
+      # default, or set by the Action that creates the trigger) — never
+      # accepted as client input
+
+update_permissions:
+  - role: user
+    permission:
+      columns: [config, is_enabled]
+      filter:
+        _or:
+          - _and:
+              - type: { _neq: webhook }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _in: [owner, editor] }
+          - _and:
+              - type: { _eq: webhook }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _eq: owner }
+      check: null
+
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        workflow:
+          org:
+            members:
+              _and:
+                - user_id: { _eq: X-Hasura-User-Id }
+                - role: { _eq: owner }
+
+object_relationships:
+  - name: workflow
+    using:
+      foreign_key_constraint_on: workflow_id

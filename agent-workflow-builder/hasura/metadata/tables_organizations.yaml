@@ -1,0 +1,67 @@
+# hasura/metadata/databases/default/tables/public_organizations.yaml
+# Track table + relationships + permissions for `organizations`.
+#
+# Auth model used throughout this project:
+#   - All authenticated users get Hasura role "user" (set via nhost JWT claim
+#     x-hasura-default-role = "user", x-hasura-allowed-roles = ["user"]).
+#   - There is deliberately NO separate Hasura role per org-role (owner/editor/
+#     viewer). Role is data (org_members.role), not identity, because a single
+#     user can hold different roles in different orgs. Every permission below
+#     scopes to the caller's own org via an `_exists` lookup against
+#     `org_members`, and further narrows by the role column where required.
+#     This is Layer 1 (org + role scoping).
+
+table:
+  schema: public
+  name: organizations
+
+select_permissions:
+  - role: user
+    permission:
+      columns: [id, name, quota_limit, quota_used, quota_period_start, created_at, updated_at]
+      filter:
+        # any member of the org (any role) can read the org record
+        org_members:
+          user_id:
+            _eq: X-Hasura-User-Id
+
+update_permissions:
+  - role: user
+    permission:
+      columns: [name]              # quota fields are only ever mutated server-side (admin secret)
+      filter:
+        org_members:
+          _and:
+            - user_id: { _eq: X-Hasura-User-Id }
+            - role: { _eq: owner }
+      check: null
+
+# insert/delete for organizations intentionally left to an admin-secret-only
+# "create org" server action (out of scope for row-level permissions —
+# creating an org has no existing org_members row to scope against yet).
+
+array_relationships:
+  - name: members
+    using:
+      foreign_key_constraint_on:
+        column: org_id
+        table:
+          schema: public
+          name: org_members
+  - name: workflows
+    using:
+      foreign_key_constraint_on:
+        column: org_id
+        table:
+          schema: public
+          name: workflows
+
+object_relationships:
+  - name: usage_summary
+    using:
+      manual_configuration:
+        remote_table:
+          schema: public
+          name: org_usage_summary
+        column_mapping:
+          id: org_id

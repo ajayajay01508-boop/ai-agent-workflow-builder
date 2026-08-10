@@ -1,0 +1,70 @@
+# workflow_runs
+# --------------------------------------------------------------------------
+# Rows are created and updated exclusively by the Action handler (using the
+# Hasura admin secret), never directly by clients — this is what lets us
+# trust `status`, `triggered_by`, quota bookkeeping, etc. `user` role only
+# gets read access, which is what powers the workflows-list query and the
+# live subscription.
+---
+table:
+  schema: public
+  name: workflow_runs
+
+select_permissions:
+  - role: user
+    permission:
+      columns: [id, workflow_id, org_id, status, trigger_type, triggered_by,
+                started_at, finished_at, error, created_at]
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+
+object_relationships:
+  - name: org
+    using:
+      foreign_key_constraint_on: org_id
+  - name: workflow
+    using:
+      foreign_key_constraint_on: workflow_id
+
+array_relationships:
+  - name: step_runs
+    using:
+      foreign_key_constraint_on:
+        column: workflow_run_id
+        table:
+          schema: public
+          name: step_runs
+
+---
+# step_runs
+# --------------------------------------------------------------------------
+# Same story: written by the Action handler only. `user` role gets select
+# (subscribable), scoped through workflow_run -> org -> org_members, so a
+# member of Org B can never subscribe to Org A's step_runs even by ID.
+table:
+  schema: public
+  name: step_runs
+
+select_permissions:
+  - role: user
+    permission:
+      columns: [id, workflow_run_id, workflow_step_id, step_order, type,
+                status, input, output, error, attempt_count,
+                approved_by, approved_at, started_at, finished_at]
+      filter:
+        workflow_run:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+
+object_relationships:
+  - name: workflow_run
+    using:
+      foreign_key_constraint_on: workflow_run_id
+  - name: workflow_step
+    using:
+      foreign_key_constraint_on: workflow_step_id

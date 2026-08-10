@@ -1,0 +1,23 @@
+type TriggerWorkflowRunOutput {
+  run_id: uuid!
+  status: String!
+}
+
+type ApproveStepOutput {
+  step_run_id: uuid!
+  status: String!
+}
+
+type Mutation {
+  """
+  Starts a workflow run. Also invoked internally (with an internal service
+  token instead of a user JWT) by the webhook endpoint, the scheduled
+  function, and the database-event trigger.
+  """
+  triggerWorkflowRun(workflow_id: uuid!): TriggerWorkflowRunOutput
+
+  """
+  Approves a paused approval_gate step and resumes the run from that point.
+  """
+  approveStep(step_run_id: uuid!): ApproveStepOutput
+}

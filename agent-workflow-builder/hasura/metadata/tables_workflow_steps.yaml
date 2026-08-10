@@ -1,0 +1,93 @@
+table:
+  schema: public
+  name: workflow_steps
+
+select_permissions:
+  - role: user
+    permission:
+      columns: [id, workflow_id, step_order, name, type, config, created_at, updated_at]
+      filter:
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+
+insert_permissions:
+  - role: user
+    permission:
+      # Layer 2 (step-level gating), enforced as a Hasura check permission:
+      # - editor or owner may insert a step of any "safe" type
+      # - db_write / notify (steps that reach outside the sandbox) require owner
+      check:
+        _or:
+          - _and:
+              - type: { _nin: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _in: [owner, editor] }
+          - _and:
+              - type: { _in: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _eq: owner }
+      columns: [workflow_id, step_order, name, type, config]
+
+update_permissions:
+  - role: user
+    permission:
+      columns: [step_order, name, config]
+      filter:
+        # editing an existing db_write/notify step still requires owner;
+        # editing any other step type requires owner or editor
+        _or:
+          - _and:
+              - type: { _nin: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _in: [owner, editor] }
+          - _and:
+              - type: { _in: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _eq: owner }
+      check: null
+
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        _or:
+          - _and:
+              - type: { _nin: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _in: [owner, editor] }
+          - _and:
+              - type: { _in: [db_write, notify] }
+              - workflow:
+                  org:
+                    members:
+                      _and:
+                        - user_id: { _eq: X-Hasura-User-Id }
+                        - role: { _eq: owner }
+
+object_relationships:
+  - name: workflow
+    using:
+      foreign_key_constraint_on: workflow_id

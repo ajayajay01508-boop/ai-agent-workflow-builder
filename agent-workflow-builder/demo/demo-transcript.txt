@@ -1,0 +1,26 @@
+$ Org A owner triggers the workflow
+  (llm_call -> http_request -> conditional_branch -> db_write -> notify -> approval_gate)
+> {"run_id":"2d50a63e-acdd-48f5-90d8-082315774aeb","status":"paused"}
+
+$ step_runs for this run (what the live subscription streams to the UI):
+  0 | llm_call | succeeded
+  1 | http_request | succeeded
+  2 | conditional_branch | succeeded
+  3 | db_write | succeeded
+  4 | notify | succeeded
+  5 | approval_gate | paused
+
+-> workflow_run status: PAUSED, awaiting approval
+
+$ Org B owner (a completely different org) tries to approve it:
+> {"message":"forbidden: approver must be owner/editor in this org"} [HTTP 403]
+
+$ Org A editor approves it:
+> {"step_run_id":"ea08a64b-6721-4dcb-a3cd-c14607514905","status":"completed"} [HTTP 200]
+
+$ final state, read straight back from Postgres:
+  run status: completed
+  org A quota_used: 1
+
+$ Org B queries workflows, guessing Org As org_id directly:
+  {"data": {"workflows": []}}   <- Hasura org_members row-level scoping

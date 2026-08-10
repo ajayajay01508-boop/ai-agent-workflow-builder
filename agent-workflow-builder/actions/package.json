@@ -1,0 +1,14 @@
+{
+  "name": "agent-workflow-builder-actions",
+  "version": "1.0.0",
+  "description": "Hasura Action handler for the AI Agent Workflow Builder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

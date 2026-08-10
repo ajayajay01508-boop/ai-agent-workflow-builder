@@ -1,0 +1,58 @@
+table:
+  schema: public
+  name: org_members
+
+select_permissions:
+  - role: user
+    permission:
+      columns: [id, org_id, user_id, role, created_at]
+      filter:
+        # you can see the member list of any org you belong to (not just your own row) —
+        # needed for the frontend to render "who's in this org" and for approval-gate
+        # UI to know who's eligible to approve
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+
+insert_permissions:
+  - role: user
+    permission:
+      # only an owner of the org can add/invite members
+      check:
+        org:
+          members:
+            _and:
+              - user_id: { _eq: X-Hasura-User-Id }
+              - role: { _eq: owner }
+      columns: [org_id, user_id, role]
+
+update_permissions:
+  - role: user
+    permission:
+      columns: [role]
+      filter:
+        org:
+          members:
+            _and:
+              - user_id: { _eq: X-Hasura-User-Id }
+              - role: { _eq: owner }
+      check: null
+
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        org:
+          members:
+            _and:
+              - user_id: { _eq: X-Hasura-User-Id }
+              - role: { _eq: owner }
+
+object_relationships:
+  - name: org
+    using:
+      foreign_key_constraint_on: org_id
+  - name: user
+    using:
+      foreign_key_constraint_on: user_id

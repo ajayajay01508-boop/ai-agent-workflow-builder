@@ -1,0 +1,29 @@
+# Example event trigger: watches an org's `leads` table (or any table named
+# in a workflow_trigger.config.table) for inserts, and calls the handler,
+# which looks up any enabled `database_event` workflow_triggers pointing at
+# that table + org and starts a run for each. One generic trigger is used
+# rather than one-per-workflow so new database-event triggers don't require
+# redeploying Hasura metadata.
+
+event_triggers:
+  - name: on_watched_table_insert
+    definition:
+      enable_manual: false
+      insert:
+        columns: '*'
+    webhook: '{{ACTIONS_BASE_URL}}/events/database-event'
+    headers:
+      - name: x-webhook-secret
+        value_from_env: ACTIONS_WEBHOOK_SECRET
+    retry_conf:
+      num_retries: 3
+      interval_sec: 10
+      timeout_sec: 60
+    # NOTE: point this at whichever table you're demoing the "database event"
+    # trigger against, e.g. `public.leads`. Hasura event triggers are bound
+    # to one table at a time; the handler is written to be table-agnostic —
+    # it reads `event.table.name` from the payload and matches it against
+    # workflow_triggers.config->>'table'.
+    table:
+      schema: public
+      name: leads
