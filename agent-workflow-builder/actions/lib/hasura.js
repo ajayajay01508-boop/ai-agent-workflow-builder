@@ -8,6 +8,11 @@ const HASURA_URL = process.env.HASURA_GRAPHQL_URL; // e.g. https://<subdomain>.n
 const ADMIN_SECRET = process.env.HASURA_ADMIN_SECRET;
 
 async function hasuraRequest(query, variables = {}) {
+  if (!HASURA_URL || !ADMIN_SECRET) {
+    const err = new Error('Hasura service configuration is incomplete');
+    err.status = 503;
+    throw err;
+  }
   const resp = await fetch(HASURA_URL, {
     method: 'POST',
     headers: {
@@ -17,6 +22,11 @@ async function hasuraRequest(query, variables = {}) {
     body: JSON.stringify({ query, variables }),
   });
 
+  if (!resp.ok) {
+    const err = new Error(`Hasura request failed with status ${resp.status}`);
+    err.status = 502;
+    throw err;
+  }
   const json = await resp.json();
   if (json.errors) {
     const err = new Error(json.errors.map((e) => e.message).join('; '));

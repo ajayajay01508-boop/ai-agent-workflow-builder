@@ -64,11 +64,21 @@ was submitted.
 
 ### Frontend
 - `npm install` succeeds.
-- `next build` compiles all 4 routes (`/`, `/org/[orgId]`,
+- `next build` compiles all routes (`/`, `/org/[orgId]`,
   `/org/[orgId]/workflow/[workflowId]`, `/404`) with no type or syntax
-  errors and prerenders them statically.
+  errors and prerenders them statically. The nested workflow-page import
+  path that previously broke production builds is covered by this CI gate.
 
-## Not yet verified — do this before your live walkthrough
+### Automated quality gates
+
+- 7 Node tests cover health/correlation IDs, webhook authentication, request
+  validation, constant-time secret comparison, expression evaluation and the
+  external HTTP executor.
+- Frontend and action-handler dependency audits report 0 vulnerabilities.
+- GitHub Actions runs backend tests, both dependency audits and the production
+  Next.js build on every pull request.
+
+## External integration verification still required
 
 1. **Hasura's actual permission enforcement.** Everything above proves the
    action handler's own role checks work; it does not prove the

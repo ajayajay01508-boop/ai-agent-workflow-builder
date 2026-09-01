@@ -13,7 +13,16 @@ const { hasuraRequest } = require('./lib/hasura');
 const { runWorkflow, resumeFromApproval } = require('./lib/engine');
 
 const app = express();
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(express.json({ limit: '256kb' }));
+app.use((req, res, next) => {
+  const requestId = req.header('x-request-id') || crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
+  next();
+});
+
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 // Shared secret Hasura sends on every Action/Event-Trigger call so this
 // service can reject requests that didn't actually come from Hasura.
@@ -33,9 +42,10 @@ function requireWebhookSecret(req, res, next) {
 app.post('/actions/triggerWorkflowRun', requireWebhookSecret, async (req, res) => {
   try {
     const userId = req.body?.session_variables?.['x-hasura-user-id'];
-    const { workflow_id } = req.body.input;
+    const { workflow_id } = req.body?.input || {};
 
     if (!userId) return res.status(401).json({ message: 'no authenticated user' });
+    if (!workflow_id) return res.status(400).json({ message: 'workflow_id is required' });
 
     const result = await runWorkflow({
       workflowId: workflow_id,
@@ -61,8 +71,9 @@ app.post('/actions/triggerWorkflowRun', requireWebhookSecret, async (req, res) =
 app.post('/actions/approveStep', requireWebhookSecret, async (req, res) => {
   try {
     const userId = req.body?.session_variables?.['x-hasura-user-id'];
-    const { step_run_id } = req.body.input;
+    const { step_run_id } = req.body?.input || {};
     if (!userId) return res.status(401).json({ message: 'no authenticated user' });
+    if (!step_run_id) return res.status(400).json({ message: 'step_run_id is required' });
 
     const result = await resumeFromApproval({ stepRunId: step_run_id, approverUserId: userId });
     res.json({ step_run_id, status: result.status });
@@ -137,7 +148,10 @@ app.post('/scheduled/run-due', requireWebhookSecret, async (req, res) => {
 app.post('/events/database-event', requireWebhookSecret, async (req, res) => {
   try {
     const { event, table } = req.body;
-    const newRow = event.data.new;
+    const newRow = event?.data?.new;
+    if (!table?.name || !newRow?.org_id) {
+      return res.status(400).json({ message: 'valid table and event.data.new.org_id are required' });
+    }
     const triggers = await getDatabaseEventTriggers({ table: table.name, orgId: newRow.org_id });
 
     const started = [];
@@ -209,4 +223,8 @@ async function getDatabaseEventTriggers({ table, orgId }) {
 }
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Action handler listening on :${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Action handler listening on :${PORT}`));
+}
+
+module.exports = { app, timingSafeEqual };
