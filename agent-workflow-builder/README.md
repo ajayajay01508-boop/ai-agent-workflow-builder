@@ -4,6 +4,14 @@ A mini n8n for chaining AI agent steps, built on nhost (Postgres + Hasura +
 Auth) with a Next.js frontend and a standalone Action-handler service that
 does the actual workflow execution.
 
+## Verified quality
+
+- Production frontend build passes for all routes.
+- Action handler has automated tests for authentication, validation,
+  correlation IDs, workflow expressions and outbound HTTP execution.
+- Both Node workspaces currently report zero dependency vulnerabilities.
+- Pull requests run backend tests, dependency audits and the frontend build.
+
 ## Architecture
 
 ```

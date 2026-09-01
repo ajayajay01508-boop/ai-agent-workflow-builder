@@ -1,13 +1,28 @@
 // actions/lib/http.js — generic external HTTP call for `http_request` steps.
 
-async function callHttp({ url, method = 'GET', headers = {}, body }) {
+async function callHttp({ url, method = 'GET', headers = {}, body, timeoutMs = 10000 }) {
   if (!url) throw new Error('http_request step is missing a url');
 
-  const resp = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: body !== undefined && method !== 'GET' ? JSON.stringify(body) : undefined,
-  });
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('http_request step has an invalid url'); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('http_request only supports http and https urls');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: body !== undefined && method !== 'GET' ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const contentType = resp.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await resp.json() : await resp.text();

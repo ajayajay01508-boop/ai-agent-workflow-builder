@@ -307,8 +307,11 @@ async function runStepsFrom({ workflow, runId, context, fromIndex }) {
     // branch result is recorded in output.branch), but a fuller
     // implementation would jump to on_true_step_id / on_false_step_id from
     // step.config and skip the steps in between.
-    if (step.type === 'conditional_branch' && step.config.on_false_step_id && !output.condition_result) {
-      const targetIdx = steps.findIndex((s) => s.id === step.config.on_false_step_id);
+    if (step.type === 'conditional_branch') {
+      const targetId = output.condition_result
+        ? step.config.on_true_step_id
+        : step.config.on_false_step_id;
+      const targetIdx = targetId ? steps.findIndex((s) => s.id === targetId) : -1;
       if (targetIdx !== -1) { i = targetIdx - 1; continue; }
     }
   }
@@ -327,6 +330,7 @@ async function resumeFromApproval({ stepRunId, approverUserId }) {
     query ($id: uuid!) {
       step_runs_by_pk(id: $id) {
         id status workflow_run_id workflow_step_id
+        workflow_step { config }
         workflow_run { id workflow_id org_id status }
       }
     }`;
@@ -339,8 +343,10 @@ async function resumeFromApproval({ stepRunId, approverUserId }) {
 
   const orgId = stepRun.workflow_run.org_id;
   const role = await getCallerRoleInOrg(approverUserId, orgId);
-  if (!role || !['owner', 'editor'].includes(role)) {
-    const e = new Error('forbidden: approver must be owner/editor in this org');
+  const requiredRole = stepRun.workflow_step?.config?.required_role || 'editor';
+  const allowedRoles = requiredRole === 'owner' ? ['owner'] : ['owner', 'editor'];
+  if (!role || !allowedRoles.includes(role)) {
+    const e = new Error(`forbidden: approver must satisfy required role ${requiredRole}`);
     e.status = 403;
     throw e;
   }
@@ -360,4 +366,4 @@ async function resumeFromApproval({ stepRunId, approverUserId }) {
   return { status: finalStatus };
 }
 
-module.exports = { runWorkflow, resumeFromApproval };
+module.exports = { runWorkflow, resumeFromApproval, interpolate, getPath, compare };

@@ -10,7 +10,7 @@ import {
   TRIGGER_WORKFLOW_RUN,
   APPROVE_STEP,
   STEP_RUNS_SUBSCRIPTION,
-} from '../../../graphql/operations';
+} from '../../../../graphql/operations';
 
 const STEP_TYPES = ['llm_call', 'http_request', 'db_write', 'notify', 'conditional_branch', 'approval_gate'];
 const OWNER_ONLY_TYPES = ['db_write', 'notify']; // mirrors the Hasura check permission
@@ -63,6 +63,18 @@ export default function WorkflowBuilder() {
   async function removeStep(stepId) {
     await deleteStep({ variables: { id: stepId } });
     refetch();
+  }
+
+  async function editStep(step) {
+    const raw = window.prompt(`Edit JSON configuration for ${step.name}`, JSON.stringify(step.config, null, 2));
+    if (raw === null) return;
+    try {
+      const config = JSON.parse(raw);
+      await upsertStep({ variables: { object: { id: step.id, workflow_id: workflowId, step_order: step.step_order, name: step.name, type: step.type, config } } });
+      await refetch();
+    } catch (e) {
+      setRunError(`Configuration was not saved: ${e.message}`);
+    }
   }
 
   async function handleRun() {
@@ -135,6 +147,7 @@ export default function WorkflowBuilder() {
             <li key={s.id} className="step-item">
               <span className={`step-type type-${s.type}`}>{s.type}</span>
               <span>{s.name}</span>
+              {canEdit && <button onClick={() => editStep(s)}>edit config</button>}
               {canEdit && <button className="remove-btn" onClick={() => removeStep(s.id)}>remove</button>}
             </li>
           ))}

@@ -1,0 +1,47 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main, production-completion]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  action-handler:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-workflow-builder/actions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agent-workflow-builder/actions/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-workflow-builder/frontend
+    env:
+      NEXT_PUBLIC_NHOST_SUBDOMAIN: test
+      NEXT_PUBLIC_NHOST_REGION: ap-south-1
+      NEXT_PUBLIC_HASURA_GRAPHQL_URL: https://example.invalid/v1/graphql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agent-workflow-builder/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --audit-level=high
