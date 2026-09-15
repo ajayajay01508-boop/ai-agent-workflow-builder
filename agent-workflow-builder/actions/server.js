@@ -27,7 +27,11 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // Shared secret Hasura sends on every Action/Event-Trigger call so this
 // service can reject requests that didn't actually come from Hasura.
 function requireWebhookSecret(req, res, next) {
-  if (req.header('x-webhook-secret') !== process.env.ACTIONS_WEBHOOK_SECRET) {
+  const expected = process.env.ACTIONS_WEBHOOK_SECRET;
+  const provided = req.header('x-webhook-secret');
+  if (typeof expected !== 'string' || expected.length === 0 ||
+      typeof provided !== 'string' || provided.length === 0 ||
+      !timingSafeEqual(provided, expected)) {
     return res.status(401).json({ message: 'unauthorized' });
   }
   next();
